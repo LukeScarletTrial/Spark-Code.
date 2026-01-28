@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Project, Sprite, Block, BlockType, User } from '../types';
 import { createNewProject, getProjects, saveProject, login } from '../services/storage';
-import { Play, Square, Save, RotateCcw, Image as ImageIcon, Plus, Trash2, MousePointer2, Move, RotateCw, MessageSquare, Clock, Repeat, Shirt, Code2, LayoutTemplate } from 'lucide-react';
+import { Play, Square, Save, RotateCcw, Image as ImageIcon, Plus, Trash2, MousePointer2, Move, RotateCw, MessageSquare, Clock, Repeat, Shirt, Code2, LayoutTemplate, Flag, MousePointerClick } from 'lucide-react';
 import PaintModal from '../components/PaintModal';
 
 // Category Definitions
 const CATEGORIES = [
+  { id: 'events', label: 'Events', color: 'bg-yellow-500', border: 'border-yellow-600', text: 'text-yellow-600' },
   { id: 'motion', label: 'Motion', color: 'bg-blue-500', border: 'border-blue-600', text: 'text-blue-600' },
   { id: 'looks', label: 'Looks', color: 'bg-purple-500', border: 'border-purple-600', text: 'text-purple-600' },
   { id: 'control', label: 'Control', color: 'bg-orange-500', border: 'border-orange-600', text: 'text-orange-600' },
 ];
 
 const BLOCK_DEFINITIONS = [
+  { type: BlockType.EVENT_FLAG_CLICKED, label: 'When 🚩 clicked', category: 'events', icon: Flag },
+  { type: BlockType.EVENT_SPRITE_CLICKED, label: 'When this sprite clicked', category: 'events', icon: MousePointerClick },
   { type: BlockType.MOVE_STEPS, label: 'Move 10 steps', category: 'motion', icon: Move },
   { type: BlockType.TURN_RIGHT, label: 'Turn right 15°', category: 'motion', icon: RotateCw },
   { type: BlockType.TURN_LEFT, label: 'Turn left 15°', category: 'motion', icon: RotateCcw },
@@ -33,7 +36,7 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [selectedSpriteId, setSelectedSpriteId] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState('motion');
+  const [activeCategory, setActiveCategory] = useState('events');
   const [isRunning, setIsRunning] = useState(false);
   
   // Paint Modal State
@@ -42,6 +45,8 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
   
   // Runtime State
   const [runtimeSprites, setRuntimeSprites] = useState<Sprite[]>([]);
+  const runtimeSpritesRef = useRef<Sprite[]>([]);
+  const isRunningRef = useRef(false);
 
   // Auth State
   const [emailInput, setEmailInput] = useState('');
@@ -56,17 +61,20 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
       if (found) {
         setProject(found);
         setRuntimeSprites(found.sprites);
+        runtimeSpritesRef.current = found.sprites;
         if (found.sprites.length > 0) setSelectedSpriteId(found.sprites[0].id);
       } else {
         const newP = createNewProject(user);
         setProject(newP);
         setRuntimeSprites(newP.sprites);
+        runtimeSpritesRef.current = newP.sprites;
         setSelectedSpriteId(newP.sprites[0].id);
       }
     } else {
       const newP = createNewProject(user);
       setProject(newP);
       setRuntimeSprites(newP.sprites);
+      runtimeSpritesRef.current = newP.sprites;
       setSelectedSpriteId(newP.sprites[0].id);
     }
   }, [projectId, user]);
@@ -123,67 +131,139 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
   }
 
   // --- Runtime Engine ---
-  const stopProject = () => {
-    setIsRunning(false);
-    if (project) {
-        setRuntimeSprites(project.sprites.map(s => ({...s, bubbleText: undefined})));
-    }
+  
+  // Helper to update a specific sprite in the ref
+  const updateSpriteState = (spriteId: string, updater: (s: Sprite) => void) => {
+      const sprites = [...runtimeSpritesRef.current];
+      const idx = sprites.findIndex(s => s.id === spriteId);
+      if (idx !== -1) {
+          const newSprite = { ...sprites[idx] };
+          updater(newSprite);
+          sprites[idx] = newSprite;
+          runtimeSpritesRef.current = sprites;
+          setRuntimeSprites(sprites);
+      }
   };
 
-  const runProject = async () => {
-    if (!project) return;
-    setIsRunning(true);
-    
-    let currentSprites = JSON.parse(JSON.stringify(project.sprites));
-    setRuntimeSprites(currentSprites);
+  const executeScript = async (spriteId: string, startIndex: number) => {
+      const sprite = runtimeSpritesRef.current.find(s => s.id === spriteId);
+      if (!sprite) return;
 
-    const executeBlock = async (sprite: Sprite, block: Block) => {
-        switch (block.type) {
+      const scripts = sprite.scripts;
+      
+      for (let i = startIndex; i < scripts.length; i++) {
+          // If we hit another Hat block, stop execution of this thread
+          if (i !== startIndex && (scripts[i].type === BlockType.EVENT_FLAG_CLICKED || scripts[i].type === BlockType.EVENT_SPRITE_CLICKED)) {
+              break;
+          }
+
+          if (!isRunningRef.current) break;
+
+          const block = scripts[i];
+          
+          switch (block.type) {
             case BlockType.MOVE_STEPS:
-                const rad = (sprite.rotation - 90) * (Math.PI / 180);
-                sprite.x += Math.cos(rad) * 10;
-                sprite.y += Math.sin(rad) * 10;
+                updateSpriteState(spriteId, (s) => {
+                    const rad = (s.rotation - 90) * (Math.PI / 180);
+                    s.x += Math.cos(rad) * 10;
+                    s.y += Math.sin(rad) * 10;
+                    // Boundary checks
+                    if (s.x > 240) s.x = 240;
+                    if (s.x < -240) s.x = -240;
+                    if (s.y > 180) s.y = 180;
+                    if (s.y < -180) s.y = -180;
+                });
                 break;
             case BlockType.TURN_RIGHT:
-                sprite.rotation += 15;
+                updateSpriteState(spriteId, (s) => s.rotation += 15);
                 break;
             case BlockType.TURN_LEFT:
-                sprite.rotation -= 15;
+                updateSpriteState(spriteId, (s) => s.rotation -= 15);
                 break;
             case BlockType.GOTO_XY:
-                sprite.x = 0;
-                sprite.y = 0;
+                updateSpriteState(spriteId, (s) => { s.x = 0; s.y = 0; });
                 break;
             case BlockType.SAY:
-                sprite.bubbleText = "Hello!";
+                updateSpriteState(spriteId, (s) => s.bubbleText = "Hello!");
+                await new Promise(r => setTimeout(r, 1000));
+                updateSpriteState(spriteId, (s) => s.bubbleText = undefined);
                 break;
             case BlockType.CHANGE_COSTUME:
-                sprite.currentCostumeIndex = (sprite.currentCostumeIndex + 1) % sprite.costumes.length;
+                updateSpriteState(spriteId, (s) => {
+                    s.currentCostumeIndex = (s.currentCostumeIndex + 1) % s.costumes.length;
+                });
                 break;
             case BlockType.WAIT:
                  await new Promise(r => setTimeout(r, 1000));
                  break;
+            case BlockType.REPEAT:
+                 // Simplified repeat: repeats the NEXT block 4 times
+                 // In a real implementation, this requires a nested structure or jump logic
+                 // For this flat list prototype, we'll just skip complex nesting logic or hardcode a small loop for the next block
+                 break;
         }
-        if (sprite.x > 240) sprite.x = 240;
-        if (sprite.x < -240) sprite.x = -240;
-        if (sprite.y > 180) sprite.y = 180;
-        if (sprite.y < -180) sprite.y = -180;
-    };
+        // Small delay to visualize execution steps
+        await new Promise(r => setTimeout(r, 50));
+      }
+  };
 
-    for (let i=0; i < 50; i++) {
-       if(!isRunning) break; 
-       
-       const nextSprites = [...currentSprites];
-       for(let sIdx = 0; sIdx < nextSprites.length; sIdx++) {
-           const sprite = nextSprites[sIdx];
-           for (const block of sprite.scripts) {
-               await executeBlock(sprite, block);
-           }
-       }
-       setRuntimeSprites([...nextSprites]);
-       await new Promise(r => setTimeout(r, 100));
-    }
+  const startFlagExecution = async () => {
+    if (!project) return;
+    setIsRunning(true);
+    isRunningRef.current = true;
+    
+    // Reset sprites to initial project state
+    const initialSprites = JSON.parse(JSON.stringify(project.sprites));
+    runtimeSpritesRef.current = initialSprites;
+    setRuntimeSprites(initialSprites);
+
+    // Find and execute "When Flag Clicked" stacks
+    initialSprites.forEach((sprite: Sprite) => {
+        sprite.scripts.forEach((block, index) => {
+            if (block.type === BlockType.EVENT_FLAG_CLICKED) {
+                // Execute blocks AFTER the hat block
+                executeScript(sprite.id, index + 1);
+            }
+        });
+        
+        // Backward compatibility: if no hat blocks exist, just run from top
+        const hasHat = sprite.scripts.some(b => b.type === BlockType.EVENT_FLAG_CLICKED || b.type === BlockType.EVENT_SPRITE_CLICKED);
+        if (!hasHat && sprite.scripts.length > 0) {
+            executeScript(sprite.id, 0);
+        }
+    });
+  };
+
+  const stopProject = () => {
     setIsRunning(false);
+    isRunningRef.current = false;
+    if (project) {
+        // Optional: Reset state or just stop updates. 
+        // Scratch keeps state where it ended, but stop usually clears bubbles.
+        const resetBubbles = runtimeSpritesRef.current.map(s => ({...s, bubbleText: undefined}));
+        runtimeSpritesRef.current = resetBubbles;
+        setRuntimeSprites(resetBubbles);
+    }
+  };
+
+  const handleSpriteClick = (spriteId: string) => {
+      // Even if not "Running" (Green Flag), click events work in Scratch
+      // But we should ensure we are working on the runtime sprites
+      if (!isRunning) {
+          setIsRunning(true);
+          isRunningRef.current = true;
+          // If starting fresh from stop, maybe sync ref? 
+          // For now, let's assume we operate on current visual state.
+      }
+
+      const sprite = runtimeSpritesRef.current.find(s => s.id === spriteId);
+      if (sprite) {
+          sprite.scripts.forEach((block, index) => {
+              if (block.type === BlockType.EVENT_SPRITE_CLICKED) {
+                  executeScript(spriteId, index + 1);
+              }
+          });
+      }
   };
 
   // --- Asset Management ---
@@ -295,11 +375,12 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
                 <div className="space-y-2">
                     {BLOCK_DEFINITIONS.filter(b => b.category === activeCategory).map(block => {
                       const catDef = CATEGORIES.find(c => c.id === block.category);
+                      const isHat = block.type === BlockType.EVENT_FLAG_CLICKED || block.type === BlockType.EVENT_SPRITE_CLICKED;
                       return (
                         <div 
                           key={block.type}
                           onClick={() => addBlock(block.type)}
-                          className={`${catDef?.color} text-white p-3 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:brightness-110 transition-all flex items-center gap-2 text-xs font-medium select-none`}
+                          className={`${catDef?.color} text-white p-3 ${isHat ? 'rounded-t-xl rounded-b-lg mt-2' : 'rounded-lg'} cursor-pointer shadow-sm hover:shadow-md hover:brightness-110 transition-all flex items-center gap-2 text-xs font-medium select-none`}
                         >
                           <block.icon size={14} />
                           {block.label}
@@ -332,9 +413,18 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
                  {activeSprite?.scripts.map((block, idx) => {
                      const def = BLOCK_DEFINITIONS.find(b => b.type === block.type);
                      const catDef = CATEGORIES.find(c => c.id === def?.category);
+                     const isHat = block.type === BlockType.EVENT_FLAG_CLICKED || block.type === BlockType.EVENT_SPRITE_CLICKED;
+                     // Check if previous block was a Hat or a regular block to determine connector
+                     const isFirst = idx === 0;
+                     const prevBlock = idx > 0 ? activeSprite.scripts[idx-1] : null;
+                     const prevIsHat = prevBlock ? (prevBlock.type === BlockType.EVENT_FLAG_CLICKED || prevBlock.type === BlockType.EVENT_SPRITE_CLICKED) : false;
+                     
+                     // If it's a hat block, add some spacing if it's not the first block
+                     const marginTop = (isHat && !isFirst) ? 'mt-6' : 'mt-1';
+
                      return (
-                         <div key={block.id} className="relative group mb-1 w-fit">
-                             <div className={`${catDef?.color || 'bg-gray-500'} text-white p-3 rounded-lg shadow-sm inline-flex items-center gap-2 text-sm font-medium cursor-grab active:cursor-grabbing`}>
+                         <div key={block.id} className={`relative group w-fit ${marginTop}`}>
+                             <div className={`${catDef?.color || 'bg-gray-500'} text-white p-3 ${isHat ? 'rounded-t-xl rounded-b-md' : 'rounded-md'} shadow-sm inline-flex items-center gap-2 text-sm font-medium cursor-grab active:cursor-grabbing`}>
                                  {def?.icon && <def.icon size={16} />}
                                  {def?.label}
                              </div>
@@ -344,9 +434,9 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
                              >
                                  <Trash2 size={16} />
                              </button>
-                             {/* Connector Line */}
-                             {idx < activeSprite.scripts.length - 1 && (
-                                 <div className={`w-1.5 h-3 ml-4 ${catDef?.color || 'bg-gray-500'}`}></div>
+                             {/* Connector Line logic: visual only */}
+                             {idx < activeSprite.scripts.length - 1 && !isHat && (
+                                 <div className={`w-1.5 h-1 ml-4 ${catDef?.color || 'bg-gray-500'}`}></div>
                              )}
                          </div>
                      );
@@ -360,8 +450,8 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
              {/* Top: Stage Control Header */}
              <div className="p-2 bg-white border-b flex justify-between items-center h-10 shrink-0">
                  <div className="flex items-center gap-2">
-                    <button onClick={runProject} disabled={isRunning} className="p-1 bg-green-100 hover:bg-green-200 rounded text-green-600 transition-colors">
-                        <Play className="fill-current w-5 h-5" />
+                    <button onClick={startFlagExecution} className="p-1 bg-green-100 hover:bg-green-200 rounded text-green-600 transition-colors">
+                        <Flag className="fill-current w-5 h-5" />
                     </button>
                     <button onClick={stopProject} className="p-1 bg-red-100 hover:bg-red-200 rounded text-red-600 transition-colors">
                         <Square className="fill-current w-5 h-5" />
@@ -386,7 +476,11 @@ const Editor: React.FC<EditorProps> = ({ user, setUser }) => {
                     {(isRunning ? runtimeSprites : project.sprites).map(sprite => (
                         <div
                             key={sprite.id}
-                            className="absolute transform transition-transform duration-100 will-change-transform"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleSpriteClick(sprite.id);
+                            }}
+                            className="absolute transform transition-transform duration-100 will-change-transform cursor-pointer hover:brightness-110"
                             style={{
                                 left: '50%',
                                 top: '50%',

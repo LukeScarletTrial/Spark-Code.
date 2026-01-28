@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Check, Brush, Eraser, Loader2, Sparkles, PaintBucket } from 'lucide-react';
-import { generateAsset } from '../services/geminiService';
+import { X, Check, Brush, Eraser } from 'lucide-react';
 
 interface PaintModalProps {
   initialImage?: string;
@@ -15,8 +14,6 @@ const PaintModal: React.FC<PaintModalProps> = ({ initialImage, onSave, onClose, 
   const [brushSize, setBrushSize] = useState(5);
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
   const [isDrawing, setIsDrawing] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -103,29 +100,6 @@ const PaintModal: React.FC<PaintModalProps> = ({ initialImage, onSave, onClose, 
     onClose();
   };
 
-  const handleAiGenerate = async () => {
-    if (!aiPrompt) return;
-    setIsGenerating(true);
-    try {
-      const assetUrl = await generateAsset(aiPrompt, isBackground ? 'background' : 'sprite');
-      
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
-      if (canvas && ctx) {
-        const img = new Image();
-        img.onload = () => {
-          ctx.clearRect(0,0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          setIsGenerating(false);
-        };
-        img.src = assetUrl;
-      }
-    } catch (e) {
-      alert('Failed to generate image. Check console or API key.');
-      setIsGenerating(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -172,24 +146,6 @@ const PaintModal: React.FC<PaintModalProps> = ({ initialImage, onSave, onClose, 
                 onChange={(e) => setBrushSize(Number(e.target.value))}
                 className="w-24"
               />
-           </div>
-
-           <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-             <input 
-               type="text" 
-               placeholder="Describe to Generate AI..." 
-               className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-               value={aiPrompt}
-               onChange={e => setAiPrompt(e.target.value)}
-             />
-             <button 
-               onClick={handleAiGenerate}
-               disabled={isGenerating || !aiPrompt}
-               className="bg-purple-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 disabled:opacity-50"
-             >
-               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin"/> : <Sparkles className="w-4 h-4" />}
-               GenAI
-             </button>
            </div>
         </div>
 

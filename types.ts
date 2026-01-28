@@ -1,3 +1,4 @@
+
 export enum BlockType {
   MOVE_STEPS = 'MOVE_STEPS',
   TURN_RIGHT = 'TURN_RIGHT',
@@ -7,6 +8,8 @@ export enum BlockType {
   WAIT = 'WAIT',
   REPEAT = 'REPEAT',
   CHANGE_COSTUME = 'CHANGE_COSTUME',
+  EVENT_FLAG_CLICKED = 'EVENT_FLAG_CLICKED',
+  EVENT_SPRITE_CLICKED = 'EVENT_SPRITE_CLICKED',
 }
 
 export interface Block {
