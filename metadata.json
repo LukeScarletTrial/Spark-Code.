@@ -1,0 +1,7 @@
+{
+  "name": "Spark Code",
+  "description": "A block-based creative coding platform with AI-powered asset generation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
