@@ -22,11 +22,15 @@ export const generateAsset = async (prompt: string, type: 'sprite' | 'background
       }
     });
 
-    // Check for inline data in candidates
-    const part = response.candidates?.[0]?.content?.parts?.[0];
+    // Check for inline data in candidates by iterating through all parts
+    const parts = response.candidates?.[0]?.content?.parts;
     
-    if (part && part.inlineData && part.inlineData.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    if (parts) {
+      for (const part of parts) {
+        if (part.inlineData && part.inlineData.data) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+      }
     }
     
     throw new Error("No image data returned");
