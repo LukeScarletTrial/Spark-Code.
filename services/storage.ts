@@ -1,3 +1,4 @@
+
 import { Project, User, DEFAULT_SPRITE_IMAGE } from '../types';
 
 // Mocking a backend with LocalStorage for instant usability without config keys
@@ -52,6 +53,9 @@ export const createNewProject = (user: User): Project => {
     authorName: user.name,
     createdAt: Date.now(),
     backdrop: '#ffffff',
+    variables: [
+        { id: 'var_1', name: 'my variable', value: 0, isCloud: false }
+    ],
     sprites: [
       {
         id: 'sprite_1',
@@ -60,6 +64,7 @@ export const createNewProject = (user: User): Project => {
         y: 0,
         rotation: 90,
         size: 100,
+        visible: true,
         costumes: [DEFAULT_SPRITE_IMAGE],
         currentCostumeIndex: 0,
         scripts: [],
